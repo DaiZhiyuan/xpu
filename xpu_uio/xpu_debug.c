@@ -60,7 +60,7 @@ int main(int argc, char **argv)
 	fprintf(stdout, "[Vendor ID]: 0x%04X\n", buffer);
 
 	buffer = 0;
-	xpu_read_config(configfd, &buffer, 2, 0x20);
+	xpu_read_config(configfd, &buffer, 2, 0x02);
 	fprintf(stdout, "[Device ID]: 0x%04X\n", buffer);
 
 	buffer = 0;
