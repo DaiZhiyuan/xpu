@@ -34,15 +34,19 @@ REDHAT_SUPPORT_PRODUCT_VERSION="8"
 00:04.0 SCSI storage controller: Red Hat, Inc. Virtio block device
 ```
 
-
-
 ## 3. Load Linux Driver(xpu.ko)
 ```
 [root@localhost ~]# lspci -kv -s 00:01.0
 00:01.0 Unclassified device [00ff]: Phytium Technology, Inc. XPU accelerater device (rev 01)
         Subsystem: Red Hat, Inc. Device 1100
-        Flags: fast devsel, IRQ 42, IOMMU group 2
-        Memory at 10000000 (32-bit, non-prefetchable) [size=1M]
+        Control: I/O- Mem+ BusMaster+ SpecCycle- MemWINV- VGASnoop- ParErr- Stepping- SERR- FastB2B- DisINTx-
+        Status: Cap+ 66MHz- UDF- FastB2B- ParErr- DEVSEL=fast >TAbort- <TAbort- <MAbort- >SERR- <PERR- INTx-
+        Latency: 128
+        Interrupt: pin A routed to IRQ 42
+        IOMMU group: 2
+        Region 0: Memory at 10000000 (32-bit, non-prefetchable) [size=1M]
+        Capabilities: [40] MSI: Enable- Count=1/1 Maskable- 64bit+
+                Address: 0000000000000000  Data: 0000
         Kernel driver in use: xpu_driver
         Kernel modules: xpu
 
