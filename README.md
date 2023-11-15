@@ -114,16 +114,16 @@ lrwxrwxrwx. 1 root root 0 10月 23 02:26 /sys/bus/pci/devices/0000:00:01.0/drive
 -----------XPU configure space----------
 [Vendor ID]: 0x1DB7
 [Device ID]: 0xDC3D
-[Command]: 0x0002
+[Command]: 0x0006
         [IO Space Enable]: 0x0000
         [MMIO Space Enable]: 0x0001
-        [BUS Master Enable]: 0x0000
+        [BUS Master Enable]: 0x0001
         [Interrupt Disable]: 0x0000
-[Status]: 0x0000
+[Status]: 0x0010
 [Revision ID]: 0x01
 [Class Code]: 0x00FF00
 [Cache Line]: 0x00
-[Latency Timer]: 0x00
+[Latency Timer]: 0x80
 [Header Type]: 0x00
 [BIST]: 0x00
 [Base Address 0]: 0x10000000
@@ -136,7 +136,7 @@ lrwxrwxrwx. 1 root root 0 10月 23 02:26 /sys/bus/pci/devices/0000:00:01.0/drive
 [Subsystem Vendor ID]: 0x1AF4
 [Subsystem Device ID]: 0x1100
 [Expansion ROM Base Address]: 0x00000000
-[Reserved(Capability List)]: 0x00000000
+[Reserved(Capability List)]: 0x00000040
 [Reserved]: 0x00000000
 [IRQ Line]: 0xFF
 [IRQ Pin]: 0x01
@@ -148,4 +148,8 @@ lrwxrwxrwx. 1 root root 0 10月 23 02:26 /sys/bus/pci/devices/0000:00:01.0/drive
 [0x14]: 0xFFFFFFFF
 [0x18]: 0xFFFFFFFF
 [0x30]: 0xFFFFFFFF
+[0x80]: 0xFFFFFFFF
+[0x88]: 0xFFFFFFFF
+[0x90]: 0xFFFFFFFF
+[0x98]: 0xFFFFFFFF
 ```
