@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/ioctl.h>
+#include <linux/delay.h>
 
 #define XPU_IO          251
 #define GET_ID		0
@@ -139,11 +140,35 @@ static struct file_operations fops = {
 	.write   = write,
 };
 
+static irqreturn_t irq_handler(int irq, void *dev)
+{
+	int devi;
+	irqreturn_t ret;
+	u32 irq_status;
+
+	devi = *(int *)dev;
+	if (devi == major) {
+		irq_status = ioread32(mmio + 0x24);
+		pr_info("xpu_irq_handler irq = %d dev = %d irq_status = %llx\n",
+				irq, devi, (unsigned long long)irq_status);
+		/* Must do this ACK, or else the interrupts just keeps firing. */
+		iowrite32(irq_status, mmio + 0x64);
+		ret = IRQ_HANDLED;
+	} else {
+		ret = IRQ_NONE;
+	}
+	return ret;
+}
+
 static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	resource_size_t start, end;
-	u8 val;
+	u8 val, lat;
 	unsigned i;
+	int irq;
+	int nvec = 2;
+	void *cpu_from, *cpu_to;
+	dma_addr_t dma_from, dma_to;
 
 	pr_info("[XPU] PCI BUS probe.\n");
 
@@ -166,6 +191,10 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		dev_err(&(dev->dev), "pci_resource_flags\n");
 		goto error;
 	}
+	pci_set_master(pdev);
+
+	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
+	dev_info(&(dev->dev), "latency timer = %u clocks\n", lat);
 
 	start = pci_resource_start(pdev, BAR);
 	end = pci_resource_end(pdev, BAR);
@@ -181,6 +210,43 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		pr_info("[mmio space] [0x%x] [0x%x]\n", i, ioread32((void*)(mmio + i)));
 	}
 
+	dma_set_mask_and_coherent(&(dev->dev), DMA_BIT_MASK(28));
+	cpu_from = dma_alloc_coherent(&(dev->dev), 4, &dma_from, GFP_ATOMIC);
+
+	dev_info(&(dev->dev), "CPU address: %p\n", cpu_from);
+	dev_info(&(dev->dev), "DMA address: %llx\n", (unsigned long long)dma_from);
+
+	*((volatile u32*)cpu_from) = 0x12345678;
+
+	iowrite32(dma_from, mmio + 0x80);
+	iowrite32(0x40000, mmio + 0x88);
+	iowrite32(4, mmio + 0x90);
+	iowrite32(0x1, mmio + 0x98);
+	mdelay(lat);
+
+	for (i = 0x80; i <= 0x98; i += 8) {
+		pr_info("[mmio space] [0x%x] [0x%x]\n", i, ioread32((void*)(mmio + i)));
+	}
+
+	cpu_to = dma_alloc_coherent(&(dev->dev), 4, &dma_to, GFP_ATOMIC);
+	dev_info(&(dev->dev), "CPU address: %p\n", cpu_to);
+	dev_info(&(dev->dev), "DMA address: %llx\n", (unsigned long long)dma_to);
+
+	iowrite32(0x40000, mmio + 0x80);
+	iowrite32((u32)dma_to, mmio + 0x88);
+	iowrite32(4, mmio + 0x90);
+	iowrite32(0x3, mmio + 0x98);
+	mdelay(lat);
+
+	for (i = 0x80; i <= 0x98; i += 8) {
+		pr_info("[mmio space] [0x%x] [0x%x]\n", i, ioread32((void*)(mmio + i)));
+	}
+
+	pr_info("[DMA return]: %x\n", *(volatile u32*)cpu_to);
+
+	dma_free_coherent(&(dev->dev), 4, cpu_to, dma_to);
+
+	dma_free_coherent(&(dev->dev), 4, cpu_from, dma_from);
 	return 0;
 error:
 	return 1;
