@@ -15,6 +15,11 @@
 #define XPU_OP2_OFFSET		0x14
 #define XPU_OPCODE_OFFSET	0x18
 #define XPU_RESULT_OFFSET	0x30
+#define XPU_IRQ_STATUS_OFFSET   0x40
+#define XPU_DMA_SRC_OFFSET	0x80
+#define XPU_DMA_DST_OFFSET	0x88
+#define XPU_DMA_CNT_OFFSET	0x90
+#define XPU_DMA_CMD_OFFSET	0x98
 
 static inline void xpu_write_mmio(uint32_t *bar, uint32_t offset, uint32_t value) 
 {
@@ -191,6 +196,11 @@ int main(int argc, char **argv)
 	fprintf(stdout, "[0x14]: 0x%08X\n", xpu_read_mmio(bar0, XPU_OP2_OFFSET));
 	fprintf(stdout, "[0x18]: 0x%08X\n", xpu_read_mmio(bar0, XPU_OPCODE_OFFSET));
 	fprintf(stdout, "[0x30]: 0x%08X\n", xpu_read_mmio(bar0, XPU_RESULT_OFFSET));
+	fprintf(stdout, "[0x40]: 0x%08X\n", xpu_read_mmio(bar0, XPU_IRQ_STATUS_OFFSET));
+	fprintf(stdout, "[0x80]: 0x%08X\n", xpu_read_mmio(bar0, XPU_DMA_SRC_OFFSET));
+	fprintf(stdout, "[0x88]: 0x%08X\n", xpu_read_mmio(bar0, XPU_DMA_DST_OFFSET));
+	fprintf(stdout, "[0x90]: 0x%08X\n", xpu_read_mmio(bar0, XPU_DMA_CNT_OFFSET));
+	fprintf(stdout, "[0x98]: 0x%08X\n", xpu_read_mmio(bar0, XPU_DMA_CMD_OFFSET));
 
 	munmap(bar0, XPU_IO_SIZE);
 	close(bar0fd);
