@@ -10,7 +10,7 @@
 #include <linux/delay.h>
 
 #define XPU_IO          251
-#define GET_ID		0
+#define GET_ID			0
 #define GET_OP1         1
 #define GET_OP2         2
 #define GET_OPCODE      3
@@ -19,7 +19,7 @@
 #define SET_OP2         6
 #define SET_OPCODE      7
 
-#define XPU_ID		_IOR(XPU_IO, GET_ID, int *)
+#define XPU_ID			_IOR(XPU_IO, GET_ID, int *)
 #define XPU_GET_OP1     _IOR(XPU_IO, GET_OP1, int *)
 #define XPU_GET_OP2     _IOR(XPU_IO, GET_OP2, int *)
 #define XPU_GET_OPCODE  _IOR(XPU_IO, GET_OPCODE, int *)
@@ -31,14 +31,15 @@
 #define OPCODE_ADD      0x1
 #define OPCODE_MUL      0x2
 
-#define BAR 0
-#define XPU_CDEV_NAME "xpu"
-#define XPU_VENDOR_ID 0x1db7
-#define XPU_DEVICE_ID 0xdc3d
+#define BAR				0
+#define XPU_CDEV_NAME	"xpu"
+#define XPU_VENDOR_ID	0x1db7
+#define XPU_DEVICE_ID	0xdc3d
 
-static int major;
 static struct pci_dev *pdev;
 static void __iomem *mmio;
+static int major;
+static int irq;
 
 static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -142,22 +143,16 @@ static struct file_operations fops = {
 
 static irqreturn_t irq_handler(int irq, void *dev)
 {
-	int devi;
-	irqreturn_t ret;
 	u32 irq_status;
 
-	devi = *(int *)dev;
-	if (devi == major) {
-		irq_status = ioread32(mmio + 0x24);
-		pr_info("xpu_irq_handler irq = %d dev = %d irq_status = %llx\n",
-				irq, devi, (unsigned long long)irq_status);
-		/* Must do this ACK, or else the interrupts just keeps firing. */
-		iowrite32(irq_status, mmio + 0x64);
-		ret = IRQ_HANDLED;
-	} else {
-		ret = IRQ_NONE;
-	}
-	return ret;
+	irq_status = ioread32(mmio + 0x40);
+	pr_info("xpu_irq_handler: irq = %d, irq_status = %x\n",
+				irq, irq_status);
+
+	/* Must do this ACK, or else the interrupts just keeps firing. */
+	iowrite32(irq_status, mmio + 0x48);
+
+	return IRQ_HANDLED;
 }
 
 static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
@@ -165,10 +160,10 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	resource_size_t start, end;
 	u8 val, lat;
 	unsigned i;
-	int irq;
 	int nvec = 2;
 	void *cpu_from, *cpu_to;
 	dma_addr_t dma_from, dma_to;
+	int ret;
 
 	pr_info("[XPU] PCI BUS probe.\n");
 
@@ -191,10 +186,35 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		dev_err(&(dev->dev), "pci_resource_flags\n");
 		goto error;
 	}
+
 	pci_set_master(pdev);
 
 	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
 	dev_info(&(dev->dev), "latency timer = %u clocks\n", lat);
+
+	nvec = pci_alloc_irq_vectors(pdev, 1, nvec, PCI_IRQ_ALL_TYPES);
+	if (nvec < 0) {
+		pr_info("RETURN: %d\n", nvec);
+        	goto error;
+	}
+
+	if (dev->msi_enabled) 
+		pr_info("MSI Enabled\n");
+
+	pr_info("MSI Vector: %d\n", nvec);
+
+	irq = pci_irq_vector(pdev, 0);
+	pr_info("IRQ Number: %d\n", irq);
+	pr_info("pdev->irq: %d\n", pdev->irq);
+
+	ret = request_irq(pdev->irq, irq_handler, IRQF_NO_THREAD, "xpu_dma_interrupt", NULL);
+	if (ret) {
+		dev_err(&(dev->dev), "request_irq: %d\n", ret);
+		goto error;
+	}
+
+	/* Raise IRQ */
+	//iowrite32(0x1, mmio + 0x44);
 
 	start = pci_resource_start(pdev, BAR);
 	end = pci_resource_end(pdev, BAR);
@@ -216,12 +236,11 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	dev_info(&(dev->dev), "CPU address: %p\n", cpu_from);
 	dev_info(&(dev->dev), "DMA address: %llx\n", (unsigned long long)dma_from);
 
-	*((volatile u32*)cpu_from) = 0x12345678;
-
+	*((volatile u32*)cpu_from) = 0x87654321;
 	iowrite32(dma_from, mmio + 0x80);
 	iowrite32(0x40000, mmio + 0x88);
 	iowrite32(4, mmio + 0x90);
-	iowrite32(0x1, mmio + 0x98);
+	iowrite32(0x5, mmio + 0x98);
 	mdelay(lat);
 
 	for (i = 0x80; i <= 0x98; i += 8) {
@@ -235,7 +254,7 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	iowrite32(0x40000, mmio + 0x80);
 	iowrite32((u32)dma_to, mmio + 0x88);
 	iowrite32(4, mmio + 0x90);
-	iowrite32(0x3, mmio + 0x98);
+	iowrite32(0x7, mmio + 0x98);
 	mdelay(lat);
 
 	for (i = 0x80; i <= 0x98; i += 8) {
@@ -245,7 +264,6 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	pr_info("[DMA return]: %x\n", *(volatile u32*)cpu_to);
 
 	dma_free_coherent(&(dev->dev), 4, cpu_to, dma_to);
-
 	dma_free_coherent(&(dev->dev), 4, cpu_from, dma_from);
 	return 0;
 error:
@@ -256,6 +274,8 @@ static void pci_remove(struct pci_dev *dev)
 {
 	pr_info("[XPU] PCI BUS remove.\n");
 	pci_release_region(dev, BAR);
+	if (irq)
+		free_irq(irq, NULL);
 	unregister_chrdev(major, XPU_CDEV_NAME);
 }
 
