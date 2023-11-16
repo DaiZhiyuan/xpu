@@ -26,23 +26,45 @@ struct XpudevState {
 	uint32_t result;
 	uint32_t error_code;
 
+	uint32_t irq_status;
+
 #define XPU_DMA_RUN             0x1
 #define XPU_DMA_DIRECTION(cmd) (((cmd) & 0x2) >> 1)
 #define XPU_DMA_FROM_PCI		0
 #define XPU_DMA_TO_PCI			1
-/*
- * #define XPU_DMA_IRQ			0x4
- */
+#define XPU_DMA_IRQ				0x4
+
 	struct dma_state {
 		dma_addr_t src;
 		dma_addr_t dst;
 		dma_addr_t cnt;
 		dma_addr_t cmd;
 	} dma;
+
 	QEMUTimer dma_timer;
 	char dma_buffer[DMA_SIZE];
 	uint64_t dma_mask;
 };
+
+static void xpu_raise_irq(XpudevState *xpu, uint32_t val)
+{
+	xpu->irq_status |= val;
+
+	if (xpu->irq_status) {
+		if (msi_enabled(&xpu->pdev))
+			msi_notify(&xpu->pdev, 0);
+		else
+			pci_set_irq(&xpu->pdev, 1);
+	}
+}
+
+static void xpu_lower_irq(XpudevState *xpu, uint32_t val)
+{
+	xpu->irq_status &= ~val;
+
+	if (!xpu->irq_status && (!msi_enabled(&xpu->pdev)))
+		pci_set_irq(&xpu->pdev, 0);
+}
 
 static void dma_rw(XpudevState *xpu, bool write, dma_addr_t *val, dma_addr_t *dma, bool timer)
 {
@@ -103,6 +125,10 @@ static uint64_t xpudev_mmio_read(void *opaque, hwaddr addr, unsigned size)
 			val = xpudev->result;
 			break;
 
+		case 0x40:
+			val = xpudev->irq_status;
+			break;
+
 		case 0x80:
 			dma_rw(xpudev, false, &val, &xpudev->dma.src, false);
 			break;
@@ -147,6 +173,14 @@ static void xpudev_mmio_write(void *opaque, hwaddr addr, uint64_t val,
 
 		case 0x18:
 			xpudev->opcode = val;
+			break;
+
+		case 0x44:
+			xpu_raise_irq(xpudev, val);
+			break;
+
+		case 0x48:
+			xpu_lower_irq(xpudev, val);
 			break;
 
 		case 0x80:
@@ -211,6 +245,7 @@ static dma_addr_t xpu_clamp_addr(const XpudevState *xpu, dma_addr_t addr)
 static void xpu_dma_timer(void *opaque)
 {
 	XpudevState *xpu = opaque;
+	bool raise_irq = false;
 
 	if (!(xpu->dma.cmd & XPU_DMA_RUN))
 		return;
@@ -238,8 +273,12 @@ static void xpu_dma_timer(void *opaque)
 	/* Clear EDU_DMA_RUN bit */
 	xpu->dma.cmd &= ~XPU_DMA_RUN;
 
+	if (xpu->dma.cmd & XPU_DMA_IRQ)
+		raise_irq = true;
+
 	/* Raise IRQ */
-	//xpu_raise_irq(xpu, DMA_IRQ);
+	if (raise_irq)
+		xpu_raise_irq(xpu, XPU_DMA_IRQ);
 }
 
 static void pci_xpudev_realize(PCIDevice *pdev, Error **errp)
@@ -258,7 +297,7 @@ static void pci_xpudev_realize(PCIDevice *pdev, Error **errp)
 	xpudev->op2 = 0x2;
 	xpudev->opcode = 0x1;
 	xpudev->result = 0x3;
-	xpudev->error_code = 0x00;
+	xpudev->error_code = 0x0;
 
 	memory_region_init_io(&xpudev->mmio, OBJECT(xpudev), &xpudev_mmio_ops, xpudev, "xpudev-mmio", 1 * MiB);
 	pci_register_bar(pdev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &xpudev->mmio);
