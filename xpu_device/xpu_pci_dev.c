@@ -261,7 +261,7 @@ static void xpu_dma_timer(void *opaque)
 	} 
 	
 	/* DMA_DIRECTION_FROM_DEVICE */
-	if (XPU_DMA_DIRECTION(xpu->dma.cmd) == XPU_DMA_TO_PCI ) {
+	if (XPU_DMA_DIRECTION(xpu->dma.cmd) == XPU_DMA_TO_PCI) {
 		uint64_t src = xpu->dma.src;
 		xpu_check_range(src, xpu->dma.cnt, DMA_START, DMA_SIZE);
 
@@ -270,7 +270,7 @@ static void xpu_dma_timer(void *opaque)
 			xpu->dma_buffer + src, xpu->dma.cnt);
 	}
 
-	/* Clear EDU_DMA_RUN bit */
+	/* Clear XDU_DMA_RUN bit */
 	xpu->dma.cmd &= ~XPU_DMA_RUN;
 
 	if (xpu->dma.cmd & XPU_DMA_IRQ)

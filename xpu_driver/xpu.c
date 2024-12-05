@@ -35,6 +35,7 @@
 #define BAR             0
 #define XPU_VENDOR_ID   0x1db7
 #define XPU_DEVICE_ID   0xdc3d
+#define XPU_DMA_BUF     0x40000
 
 static const char xpu_dev_name[] = "xpu";
 static int xpu_char_dev_major = -1;
@@ -198,28 +199,6 @@ static irqreturn_t irq_handler(int irq, void *dev)
         return IRQ_HANDLED;
 }
 
-/*
-int xpu_sva_device_init(struct pci_dev *pdev)
-{
-        struct device *dev = &pdev->dev;
-        int ret;
-
-        ret = iommu_dev_enable_feature(dev, IOMMU_DEV_FEAT_IOPF);
-        if (ret) {
-                dev_err(dev, "Failed to enable IOPF feature!\n");
-                return -EINVAL;
-        }
-
-        ret = iommu_dev_enable_feature(dev, IOMMU_DEV_FEAT_SVA);
-        if (ret) {
-                dev_err(dev, "Failed to enable SVA feature!\n");
-                return -EINVAL;
-        }
-
-        return 0;
-}
-*/
-
 static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
         resource_size_t start, end;
@@ -229,7 +208,6 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
         void *cpu_from, *cpu_to;
         dma_addr_t dma_from, dma_to;
         int ret;
-        int max_pasids;
         int dma_bits = 28;
 
         pr_info("[XPU] PCI BUS probe.\n");
@@ -246,13 +224,13 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
         }
 
         mmio = pci_iomap(pdev, BAR, pci_resource_len(pdev, BAR));
-
         if ((pci_resource_flags(dev, BAR) & IORESOURCE_MEM) != IORESOURCE_MEM) {
                 dev_err(&(dev->dev), "pci_resource_flags\n");
                 goto error;
         }
 
         pci_set_master(pdev);
+
         ret = dma_set_mask_and_coherent(&(pdev->dev), DMA_BIT_MASK(dma_bits));
         if (ret) {
                 dev_err(&(pdev->dev),"failed to set DMA mask & coherent bits\n");
@@ -293,21 +271,22 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
                 pr_info("[config space] [0x%x] [0x%x]\n", i, val);
         }
 
+        dev_info(&(dev->dev), "ioremap mmio address: 0x%pK\n", mmio);
+
         for (i = 0; i < 0x34; i += 4) {
                 pr_info("[mmio space] [0x%x] [0x%x]\n", i, ioread32((void*)(mmio + i)));
         }
 
         dma_set_mask_and_coherent(&(dev->dev), DMA_BIT_MASK(28));
         cpu_from = dma_alloc_coherent(&(dev->dev), 4, &dma_from, GFP_ATOMIC);
+        dev_info(&(dev->dev), "CPU address: 0x%pK\n", cpu_from);
+        dev_info(&(dev->dev), "DMA address: 0x%llx\n", dma_from);
 
-        dev_info(&(dev->dev), "CPU address: %p\n", cpu_from);
-        dev_info(&(dev->dev), "DMA address: %llx\n", (unsigned long long)dma_from);
-
-        *((volatile u32*)cpu_from) = 0x87654321;
-        iowrite32(dma_from, mmio + 0x80);
-        iowrite32(0x40000, mmio + 0x88);
-        iowrite32(4, mmio + 0x90);
-        iowrite32(0x5, mmio + 0x98);
+        *(u32*)cpu_from = 0x87654321; // Prepare data (0x87654321), copy from CPU side DMA to device side.
+        iowrite32(dma_from, mmio + 0x80); // Write dma_src register
+        iowrite32(XPU_DMA_BUF, mmio + 0x88); // write dma_dst regsiter
+        iowrite32(sizeof(u32), mmio + 0x90); // write dma_len regsiter
+        iowrite32(0x5, mmio + 0x98); // write dma_cmd regsiter
         mdelay(lat);
 
         for (i = 0x80; i <= 0x98; i += 8) {
@@ -315,28 +294,23 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
         }
 
         cpu_to = dma_alloc_coherent(&(dev->dev), 4, &dma_to, GFP_ATOMIC);
-        dev_info(&(dev->dev), "CPU address: %p\n", cpu_to);
-        dev_info(&(dev->dev), "DMA address: %llx\n", (unsigned long long)dma_to);
+        dev_info(&(dev->dev), "CPU address: 0x%pK\n", cpu_to);
+        dev_info(&(dev->dev), "DMA address: 0x%llx\n", dma_to);
 
-        iowrite32(0x40000, mmio + 0x80);
-        iowrite32((u32)dma_to, mmio + 0x88);
-        iowrite32(4, mmio + 0x90);
-        iowrite32(0x7, mmio + 0x98);
+        iowrite32(XPU_DMA_BUF, mmio + 0x80); // Write dma_src regsiter
+        iowrite32((u32)dma_to, mmio + 0x88); // Wrtie dma_dst register
+        iowrite32(sizeof(u32), mmio + 0x90); // Wrtie dma_len regsiter
+        iowrite32(0x7, mmio + 0x98); // Write dma_cmd regsiter
         mdelay(lat);
 
         for (i = 0x80; i <= 0x98; i += 8) {
                 pr_info("[mmio space] [0x%x] [0x%x]\n", i, ioread32((void*)(mmio + i)));
         }
 
-        pr_info("[DMA return]: %x\n", *(volatile u32*)cpu_to);
+        pr_info("[DMA return]: 0x%x\n", *(u32*)cpu_to); // Receive data (0x87654321), copy from device side DMA to CPU side.
 
         dma_free_coherent(&(dev->dev), 4, cpu_to, dma_to);
         dma_free_coherent(&(dev->dev), 4, cpu_from, dma_from);
-
-        max_pasids = pci_max_pasids(pdev);
-        pr_info("[max pasids]: %u\n", max_pasids);
-
-        //xpu_sva_device_init(dev);
 
         return 0;
 error:
