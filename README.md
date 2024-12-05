@@ -1,6 +1,28 @@
 # xpu
 Based on QEMU emulation PCI device, offload calculation sample program.
 
+device sepc:
+- BAR0 32-bit, non-prefetchable, 1M
+  - 0x00: ID (reset 0x12345678)
+  - 0x10: op1 
+  - 0x14: op2
+  - 0x18: opcode
+    - 0x1: add
+    - 0x2: mul
+  - 0x30: result
+  - 0x40: Interrupt status
+  - 0x48: Interrupts ACK
+  - 0x80: dma_src
+  - 0x88: dma_dst
+  - 0x90: dma_len
+  - 0x98: dma_cmd
+    - Enable, bit[0]: enable DMA.
+    - direction, bit[1]: 
+      - 0: cpu to device
+      - 1: device to cpu
+    - IRQ, bit[2]: raise interrupt.
+  
+
 ## 1. GuestOS environment
 ```
 [root@localhost ~]# uname -a
@@ -50,17 +72,108 @@ REDHAT_SUPPORT_PRODUCT_VERSION="8"
         Kernel driver in use: xpu_driver
         Kernel modules: xpu
 
-[root@localhost ~]# modinfo xpu
-filename:       /lib/modules/4.18.0-348.7.1.el8_5.aarch64/updates/xpu.ko
-license:        GPL
-author:         Jerry Dai
-description:    XPU Driver
-rhelversion:    8.5
-srcversion:     1E01AC0804427996C93D0B3
-alias:          pci:v00001DB7d0000DC3Dsv*sd*bc*sc*i*
-depends:
-name:           xpu
-vermagic:       4.18.0-348.7.1.el8_5.aarch64 SMP mod_unload modversions aarch64
+
+[  946.467639] [XPU] PCI BUS probe.
+[  946.470295] xpu_driver 0000:00:01.0: latency timer = 128 clocks
+[  946.485403] MSI Enabled
+[  946.485529] MSI Vector: 1
+[  946.485627] IRQ Number: 53
+[  946.485697] pdev->irq: 53
+[  946.487729] BAR[0]: address=0x10000000
+[  946.487866] BAR[0]: length=0x100000
+[  946.487957] [config space] [0x0] [0xb7]
+[  946.488048] [config space] [0x1] [0x1d]
+[  946.488127] [config space] [0x2] [0x3d]
+[  946.488226] [config space] [0x3] [0xdc]
+[  946.488302] [config space] [0x4] [0x6]
+[  946.488497] [config space] [0x5] [0x4]
+[  946.488675] [config space] [0x6] [0x10]
+[  946.488813] [config space] [0x7] [0x0]
+[  946.488911] [config space] [0x8] [0x1]
+[  946.488990] [config space] [0x9] [0x0]
+[  946.489087] [config space] [0xa] [0xff]
+[  946.489265] [config space] [0xb] [0x0]
+[  946.489427] [config space] [0xc] [0x0]
+[  946.489566] [config space] [0xd] [0x80]
+[  946.489713] [config space] [0xe] [0x0]
+[  946.489846] [config space] [0xf] [0x0]
+[  946.489993] [config space] [0x10] [0x0]
+[  946.490174] [config space] [0x11] [0x0]
+[  946.490320] [config space] [0x12] [0x0]
+[  946.490464] [config space] [0x13] [0x10]
+[  946.490609] [config space] [0x14] [0x0]
+[  946.490730] [config space] [0x15] [0x0]
+[  946.490874] [config space] [0x16] [0x0]
+[  946.491011] [config space] [0x17] [0x0]
+[  946.491146] [config space] [0x18] [0x0]
+[  946.491286] [config space] [0x19] [0x0]
+[  946.491426] [config space] [0x1a] [0x0]
+[  946.491554] [config space] [0x1b] [0x0]
+[  946.491686] [config space] [0x1c] [0x0]
+[  946.491811] [config space] [0x1d] [0x0]
+[  946.491955] [config space] [0x1e] [0x0]
+[  946.492079] [config space] [0x1f] [0x0]
+[  946.492231] [config space] [0x20] [0x0]
+[  946.492375] [config space] [0x21] [0x0]
+[  946.492510] [config space] [0x22] [0x0]
+[  946.492654] [config space] [0x23] [0x0]
+[  946.492823] [config space] [0x24] [0x0]
+[  946.492969] [config space] [0x25] [0x0]
+[  946.493102] [config space] [0x26] [0x0]
+[  946.493245] [config space] [0x27] [0x0]
+[  946.493370] [config space] [0x28] [0x0]
+[  946.493463] [config space] [0x29] [0x0]
+[  946.493548] [config space] [0x2a] [0x0]
+[  946.493634] [config space] [0x2b] [0x0]
+[  946.493726] [config space] [0x2c] [0xf4]
+[  946.493823] [config space] [0x2d] [0x1a]
+[  946.493919] [config space] [0x2e] [0x0]
+[  946.494040] [config space] [0x2f] [0x11]
+[  946.494167] [config space] [0x30] [0x0]
+[  946.494306] [config space] [0x31] [0x0]
+[  946.494441] [config space] [0x32] [0x0]
+[  946.494571] [config space] [0x33] [0x0]
+[  946.494706] [config space] [0x34] [0x40]
+[  946.494834] [config space] [0x35] [0x0]
+[  946.494974] [config space] [0x36] [0x0]
+[  946.495115] [config space] [0x37] [0x0]
+[  946.495250] [config space] [0x38] [0x0]
+[  946.495374] [config space] [0x39] [0x0]
+[  946.495502] [config space] [0x3a] [0x0]
+[  946.495635] [config space] [0x3b] [0x0]
+[  946.495773] [config space] [0x3c] [0xff]
+[  946.495907] [config space] [0x3d] [0x1]
+[  946.496035] [config space] [0x3e] [0x0]
+[  946.496167] [config space] [0x3f] [0x0]
+[  946.496689] xpu_driver 0000:00:01.0: ioremap mmio address: 0xffff000016b00000
+[  946.497436] [mmio space] [0x0] [0x12345678]
+[  946.497591] [mmio space] [0x4] [0xffffffff]
+[  946.497760] [mmio space] [0x8] [0xffffffff]
+[  946.497910] [mmio space] [0xc] [0xffffffff]
+[  946.498073] [mmio space] [0x10] [0x1]
+[  946.498202] [mmio space] [0x14] [0x2]
+[  946.498320] [mmio space] [0x18] [0x1]
+[  946.498448] [mmio space] [0x1c] [0xffffffff]
+[  946.498593] [mmio space] [0x20] [0xffffffff]
+[  946.498738] [mmio space] [0x24] [0xffffffff]
+[  946.498880] [mmio space] [0x28] [0xffffffff]
+[  946.499028] [mmio space] [0x2c] [0xffffffff]
+[  946.499194] [mmio space] [0x30] [0x3]
+[  946.500756] xpu_driver 0000:00:01.0: CPU address: 0xffff800005e90000
+[  946.501191] xpu_driver 0000:00:01.0: DMA address: 0xffe0000
+[  946.620888] xpu_irq_handler: irq = 53, irq_status = 4
+[  946.656435] [mmio space] [0x80] [0xffe0000]
+[  946.658920] [mmio space] [0x88] [0x40000]
+[  946.660935] [mmio space] [0x90] [0x4]
+[  946.661041] [mmio space] [0x98] [0x4]
+[  946.661353] xpu_driver 0000:00:01.0: CPU address: 0xffff800003c80000
+[  946.661708] xpu_driver 0000:00:01.0: DMA address: 0xffd0000
+[  946.761423] xpu_irq_handler: irq = 53, irq_status = 4
+[  946.795784] [mmio space] [0x80] [0x40000]
+[  946.796058] [mmio space] [0x88] [0xffd0000]
+[  946.796142] [mmio space] [0x90] [0x4]
+[  946.796216] [mmio space] [0x98] [0x6]
+[  946.796290] [DMA result]: 0x87654321
 ```
 
 ## 4. Runing App
